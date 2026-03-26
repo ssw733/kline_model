@@ -1,0 +1,1 @@
+"""Pattern search MVP package."""
