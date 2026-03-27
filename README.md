@@ -105,6 +105,7 @@ set +a
 ### Поиск
 
 - `SEARCH_TOP_K`
+- `ANALYZE_ALL_WORKERS`
 - `SEARCH_ARTIFACT_DIR`
 - `SEARCH_HORIZONS`
 - `SEARCH_ONLY_PAST`
@@ -115,6 +116,7 @@ set +a
 - `SEARCH_MIN_VOL_RATIO`
 - `SEARCH_MAX_VOL_RATIO`
 - `SEARCH_MIN_SHAPE_SCORE`
+- `SEARCH_MIN_FINAL_SCORE`
 - `BULLISH_MEAN_THRESHOLD`
 - `BULLISH_POSITIVE_RATE_THRESHOLD`
 - `BEARISH_MEAN_THRESHOLD`
@@ -279,6 +281,7 @@ python3 -m src.search --entity bitcoin --artifact-dir artifacts --top-k 5 --hori
 ```
 
 Если совпадений нет, график для этого таймфрейма не сохраняется.
+По умолчанию слабые совпадения с `score < 0.9` отбрасываются.
 
 Искать только в прошлом относительно query:
 
@@ -394,7 +397,7 @@ python3 -m src.search --entity bitcoin --artifact-dir artifacts --top-k 5 --hori
 ### Прогнать поиск по всем монетам
 
 ```bash
-python3 -m src.analyze_all --artifact-dir artifacts --top-k 5 --horizons 5,10,20 --plot-dir artifacts/plots_all
+python3 -m src.analyze_all --artifact-dir artifacts --top-k 5 --horizons 5,10,20 --plot-dir artifacts/plots_all --workers 6
 ```
 
 В массовом режиме графики сохраняются только для тех монет, у которых реально нашлись совпадения.

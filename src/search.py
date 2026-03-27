@@ -357,6 +357,22 @@ def _save_plot(
     legend_y_offset = plot_cfg.legend_y_offset
     total_height = len(panels) * panel_height
 
+    def wrap_title(title: str) -> list[str]:
+        words = title.split()
+        if not words:
+            return [title]
+        lines: list[str] = []
+        current = words[0]
+        for word in words[1:]:
+            candidate = f"{current} {word}"
+            if len(candidate) <= plot_cfg.title_max_chars:
+                current = candidate
+            else:
+                lines.append(current)
+                current = word
+        lines.append(current)
+        return lines
+
     def map_y(y_val: float, top: int) -> float:
         plot_height = panel_height - padding_top - padding_bottom
         return top + padding_top + (
@@ -400,7 +416,13 @@ def _save_plot(
         top = panel_idx * panel_height
         plot_width = outer_width - padding_left - padding_right
         plot_height = panel_height - padding_top - padding_bottom
-        svg_parts.append(f'<text x="{padding_left}" y="{top + 22}" class="title">{escape(panel["title"])}</text>')
+        title_lines = wrap_title(panel["title"])
+        title_y = top + 22
+        tspans = "".join(
+            f'<tspan x="{padding_left}" y="{title_y + idx * plot_cfg.title_line_height}">{escape(line)}</tspan>'
+            for idx, line in enumerate(title_lines)
+        )
+        svg_parts.append(f'<text class="title">{tspans}</text>')
 
         for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
             y = top + padding_top + frac * plot_height
@@ -490,6 +512,7 @@ def search(
     min_vol_ratio: float,
     max_vol_ratio: float,
     min_shape_score: float,
+    min_final_score: float,
 ) -> None:
     for timeframe, resolved_artifact_dir in _resolve_artifact_dirs(artifact_dir):
         metadata, embeddings = load_artifacts(resolved_artifact_dir)
@@ -548,6 +571,8 @@ def search(
                 continue
             if similarity["shape_score"] < min_shape_score:
                 continue
+            if similarity["final_score"] < min_final_score:
+                continue
             candidates.append((similarity["final_score"], int(idx), item, similarity))
 
         candidates.sort(key=lambda item: item[0], reverse=True)
@@ -570,7 +595,8 @@ def search(
         print(
             f"timeframe={timeframe} shape_filters=min_range_ratio={min_range_ratio} "
             f"max_range_ratio={max_range_ratio} min_vol_ratio={min_vol_ratio} "
-            f"max_vol_ratio={max_vol_ratio} min_shape_score={min_shape_score}"
+            f"max_vol_ratio={max_vol_ratio} min_shape_score={min_shape_score} "
+            f"min_final_score={min_final_score}"
         )
         if horizons:
             query_outcomes = []
@@ -662,6 +688,7 @@ def main() -> None:
     parser.add_argument("--min-vol-ratio", type=float, default=search_cfg.min_vol_ratio)
     parser.add_argument("--max-vol-ratio", type=float, default=search_cfg.max_vol_ratio)
     parser.add_argument("--min-shape-score", type=float, default=search_cfg.min_shape_score)
+    parser.add_argument("--min-final-score", type=float, default=search_cfg.min_final_score)
     args = parser.parse_args()
     horizons = [int(part) for part in args.horizons.split(",") if part.strip()]
     search(
@@ -678,6 +705,7 @@ def main() -> None:
         min_vol_ratio=args.min_vol_ratio,
         max_vol_ratio=args.max_vol_ratio,
         min_shape_score=args.min_shape_score,
+        min_final_score=args.min_final_score,
     )
 
 
