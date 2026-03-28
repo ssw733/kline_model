@@ -247,6 +247,72 @@ def _build_plot_series(
     }
 
 
+def _build_forecast_overlay(
+    query_plot: dict[str, np.ndarray | int],
+    match_plots: list[dict[str, np.ndarray | int]],
+    forecast_len: int,
+) -> dict[str, np.ndarray] | None:
+    split_idx = int(query_plot["split_idx"])
+    if not match_plots:
+        return None
+
+    future_paths: list[np.ndarray] = []
+    for match_plot in match_plots:
+        match_close = np.asarray(match_plot["close"], dtype=np.float64)
+        if len(match_close) <= split_idx:
+            continue
+        anchored_future = match_close[split_idx : split_idx + forecast_len] - float(match_close[split_idx - 1])
+        future_paths.append(anchored_future)
+
+    if not future_paths:
+        return None
+
+    max_len = min(max(len(path) for path in future_paths), forecast_len)
+    if max_len <= 0:
+        return None
+
+    aligned = np.full((len(future_paths), max_len), np.nan, dtype=np.float64)
+    for idx, path in enumerate(future_paths):
+        aligned[idx, : len(path)] = path
+
+    query_close = np.asarray(query_plot["close"], dtype=np.float64)
+    base_value = float(query_close[split_idx - 1])
+    future_x = np.arange(split_idx - 1, split_idx + max_len, dtype=np.float64)
+    median_delta = np.nanmedian(aligned, axis=0)
+    low_delta = np.nanpercentile(aligned, 25, axis=0)
+    high_delta = np.nanpercentile(aligned, 75, axis=0)
+
+    return {
+        "x": future_x,
+        "median": np.concatenate(([base_value], base_value + median_delta)),
+        "low": np.concatenate(([base_value], base_value + low_delta)),
+        "high": np.concatenate(([base_value], base_value + high_delta)),
+    }
+
+
+def _build_match_tail_overlay(
+    query_plot: dict[str, np.ndarray | int],
+    match_plot: dict[str, np.ndarray | int],
+    forecast_len: int,
+) -> dict[str, np.ndarray] | None:
+    split_idx = int(query_plot["split_idx"])
+    query_close = np.asarray(query_plot["close"], dtype=np.float64)
+    match_close = np.asarray(match_plot["close"], dtype=np.float64)
+    if len(match_close) <= split_idx:
+        return None
+
+    future_slice = match_close[split_idx : split_idx + forecast_len]
+    if len(future_slice) == 0:
+        return None
+
+    base_query = float(query_close[split_idx - 1])
+    base_match = float(match_close[split_idx - 1])
+    anchored_future = base_query + (future_slice - base_match)
+    x = np.arange(split_idx - 1, split_idx + len(future_slice), dtype=np.float64)
+    y = np.concatenate(([base_query], anchored_future))
+    return {"x": x, "y": y}
+
+
 def _save_plot(
     plot_dir: str,
     query_item: dict,
@@ -258,11 +324,19 @@ def _save_plot(
 ) -> str:
     plot_cfg = PlotConfig()
     os.makedirs(plot_dir, exist_ok=True)
-    max_horizon = max(horizons) if horizons else 0
-    query_plot = _build_plot_series(series_lookup, query_item, window_size, max_horizon)
+    forecast_len = window_size
+    plot_extension_len = forecast_len
+    if plot_cfg.show_query_actual_future:
+        plot_extension_len = max(plot_extension_len, max(horizons) if horizons else 0)
+    query_plot = _build_plot_series(series_lookup, query_item, window_size, plot_extension_len)
     query_x = query_plot["x"]
     query_close = query_plot["close"]
     split_idx = int(query_plot["split_idx"])
+    colors = plot_cfg.colors
+    match_plot_series = [
+        _build_plot_series(series_lookup, item, window_size, plot_extension_len) for _, item, _ in matches
+    ]
+    forecast_overlay = _build_forecast_overlay(query_plot, match_plot_series, forecast_len=forecast_len)
     panels: list[dict] = [
         {
             "title": (
@@ -288,16 +362,36 @@ def _save_plot(
                     "dashed": True,
                     "kind": "line",
                 }
-                if len(query_x) > split_idx
+                if plot_cfg.show_query_actual_future and len(query_x) > split_idx
+                else None,
+                {
+                    "x": forecast_overlay["x"],
+                    "low": forecast_overlay["low"],
+                    "high": forecast_overlay["high"],
+                    "color": plot_cfg.forecast_band_color,
+                    "label": "scenario IQR",
+                    "opacity": plot_cfg.forecast_band_opacity,
+                    "kind": "band",
+                }
+                if forecast_overlay is not None
+                else None,
+                {
+                    "x": forecast_overlay["x"],
+                    "y": forecast_overlay["median"],
+                    "color": plot_cfg.forecast_line_color,
+                    "label": "scenario median",
+                    "dashed": True,
+                    "kind": "line",
+                }
+                if forecast_overlay is not None
                 else None,
             ],
             "split_idx": split_idx,
+            "x_max_override": (window_size * 2) - 1,
         }
     ]
 
-    colors = plot_cfg.colors
-    for plot_idx, (rank_idx, item, score) in enumerate(matches, start=1):
-        match_plot = _build_plot_series(series_lookup, item, window_size, max_horizon)
+    for plot_idx, ((rank_idx, item, score), match_plot) in enumerate(zip(matches, match_plot_series), start=1):
         match_x = match_plot["x"]
         match_close = match_plot["close"]
         split_idx = int(match_plot["split_idx"])
@@ -326,17 +420,20 @@ def _save_plot(
                         "kind": "candles",
                     },
                     {
-                        "x": match_x[split_idx - 1 :],
-                        "y": match_close[split_idx - 1 :],
+                        "x": match_x[split_idx: split_idx + forecast_len],
+                        "open": match_plot["open"][split_idx: split_idx + forecast_len],
+                        "high": match_plot["high"][split_idx: split_idx + forecast_len],
+                        "low": match_plot["low"][split_idx: split_idx + forecast_len],
+                        "close": match_close[split_idx: split_idx + forecast_len],
                         "color": colors[(plot_idx - 1) % len(colors)],
-                        "label": "match future",
-                        "dashed": True,
-                        "kind": "line",
+                        "label": "match future candles",
+                        "kind": "candles",
                     }
                     if len(match_x) > split_idx
                     else None,
                 ],
                 "split_idx": split_idx,
+                "x_max_override": (window_size * 2) - 1,
             }
         )
 
@@ -379,15 +476,24 @@ def _save_plot(
             1.0 - ((float(y_val) - global_y_min) / (global_y_max - global_y_min))
         ) * plot_height
 
-    def to_polyline(xs: np.ndarray, ys: np.ndarray, width: int, top: int) -> str:
+    def to_polyline(xs: np.ndarray, ys: np.ndarray, width: int, top: int, panel_x_max: float) -> str:
         plot_width = width - padding_left - padding_right
-        x_max = max(len(xs) - 1, 1)
         points = []
         for x_val, y_val in zip(xs, ys):
-            px = padding_left + (float(x_val) / x_max) * plot_width
+            px = padding_left + (float(x_val) / max(panel_x_max, 1.0)) * plot_width
             py = map_y(float(y_val), top)
             points.append(f"{px:.2f},{py:.2f}")
         return " ".join(points)
+
+    def to_band_polygon(xs: np.ndarray, low: np.ndarray, high: np.ndarray, width: int, top: int, panel_x_max: float) -> str:
+        plot_width = width - padding_left - padding_right
+        upper_points = []
+        lower_points = []
+        for x_val, low_val, high_val in zip(xs, low, high):
+            px = padding_left + (float(x_val) / max(panel_x_max, 1.0)) * plot_width
+            upper_points.append(f"{px:.2f},{map_y(float(high_val), top):.2f}")
+            lower_points.append(f"{px:.2f},{map_y(float(low_val), top):.2f}")
+        return " ".join(upper_points + list(reversed(lower_points)))
 
     svg_parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{outer_width}" height="{total_height}" viewBox="0 0 {outer_width} {total_height}">',
@@ -403,6 +509,8 @@ def _save_plot(
             for values in (
                 [s["y"]]
                 if s.get("kind") == "line"
+                else [s["low"], s["high"]]
+                if s.get("kind") == "band"
                 else [s["open"], s["high"], s["low"], s["close"]]
             )
         ]
@@ -416,6 +524,12 @@ def _save_plot(
         top = panel_idx * panel_height
         plot_width = outer_width - padding_left - padding_right
         plot_height = panel_height - padding_top - padding_bottom
+        panel_x_max = float(
+            panel.get(
+                "x_max_override",
+                max(float(np.max(series["x"])) for series in panel["series"] if len(series["x"]) > 0),
+            )
+        )
         title_lines = wrap_title(panel["title"])
         title_y = top + 22
         tspans = "".join(
@@ -439,7 +553,7 @@ def _save_plot(
             f'<line x1="{padding_left}" y1="{top + padding_top + plot_height}" x2="{padding_left + plot_width}" y2="{top + padding_top + plot_height}" class="axis"/>'
         )
 
-        split_x = padding_left + ((panel["split_idx"] - 1) / max(window_size - 1, 1)) * plot_width
+        split_x = padding_left + ((panel["split_idx"] - 1) / max(panel_x_max, 1.0)) * plot_width
         svg_parts.append(
             f'<line x1="{split_x:.2f}" y1="{top + padding_top}" x2="{split_x:.2f}" y2="{top + padding_top + plot_height}" class="split"/>'
         )
@@ -449,7 +563,6 @@ def _save_plot(
             dash = ' stroke-dasharray="6 4"' if series.get("dashed") else ""
             if series.get("kind") == "candles":
                 plot_width = outer_width - padding_left - padding_right
-                x_max = max(len(series["x"]) - 1, 1)
                 candle_body = max(
                     min(plot_width / max(window_size * plot_cfg.candle_body_divisor, 1), plot_cfg.candle_body_max),
                     plot_cfg.candle_body_min,
@@ -457,7 +570,7 @@ def _save_plot(
                 for x_val, open_val, high_val, low_val, close_val in zip(
                     series["x"], series["open"], series["high"], series["low"], series["close"]
                 ):
-                    px = padding_left + (float(x_val) / x_max) * plot_width
+                    px = padding_left + (float(x_val) / max(panel_x_max, 1.0)) * plot_width
                     wick_y1 = map_y(float(high_val), top)
                     wick_y2 = map_y(float(low_val), top)
                     open_y = map_y(float(open_val), top)
@@ -473,8 +586,13 @@ def _save_plot(
                         f'<rect x="{px - candle_body / 2:.2f}" y="{body_y:.2f}" width="{candle_body:.2f}" '
                         f'height="{body_h:.2f}" fill="{body_color}" opacity="0.85"/>'
                     )
+            elif series.get("kind") == "band":
+                polygon = to_band_polygon(series["x"], series["low"], series["high"], outer_width, top, panel_x_max)
+                svg_parts.append(
+                    f'<polygon points="{polygon}" fill="{series["color"]}" opacity="{float(series.get("opacity", 0.2)):.2f}"/>'
+                )
             else:
-                polyline = to_polyline(series["x"], series["y"], outer_width, top)
+                polyline = to_polyline(series["x"], series["y"], outer_width, top, panel_x_max)
                 svg_parts.append(
                     f'<polyline fill="none" stroke="{series["color"]}" stroke-width="2"{dash} points="{polyline}"/>'
                 )

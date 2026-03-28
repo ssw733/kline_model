@@ -117,6 +117,10 @@ class PlotConfig:
     candle_body_min_height: float = _get_env_float("PLOT_CANDLE_BODY_MIN_HEIGHT", 1.2)
     up_candle_color: str = os.getenv("PLOT_UP_CANDLE_COLOR", "#16a34a")
     down_candle_color: str = os.getenv("PLOT_DOWN_CANDLE_COLOR", "#dc2626")
+    forecast_line_color: str = os.getenv("PLOT_FORECAST_LINE_COLOR", "#7c3aed")
+    forecast_band_color: str = os.getenv("PLOT_FORECAST_BAND_COLOR", "#c4b5fd")
+    forecast_band_opacity: float = _get_env_float("PLOT_FORECAST_BAND_OPACITY", 0.28)
+    show_query_actual_future: bool = os.getenv("PLOT_SHOW_QUERY_ACTUAL_FUTURE", "").lower() in {"1", "true", "yes"}
 
     def __init__(self) -> None:
         object.__setattr__(
@@ -142,6 +146,14 @@ class PlotConfig:
         object.__setattr__(self, "candle_body_min_height", _get_env_float("PLOT_CANDLE_BODY_MIN_HEIGHT", 1.2))
         object.__setattr__(self, "up_candle_color", os.getenv("PLOT_UP_CANDLE_COLOR", "#16a34a"))
         object.__setattr__(self, "down_candle_color", os.getenv("PLOT_DOWN_CANDLE_COLOR", "#dc2626"))
+        object.__setattr__(self, "forecast_line_color", os.getenv("PLOT_FORECAST_LINE_COLOR", "#7c3aed"))
+        object.__setattr__(self, "forecast_band_color", os.getenv("PLOT_FORECAST_BAND_COLOR", "#c4b5fd"))
+        object.__setattr__(self, "forecast_band_opacity", _get_env_float("PLOT_FORECAST_BAND_OPACITY", 0.28))
+        object.__setattr__(
+            self,
+            "show_query_actual_future",
+            os.getenv("PLOT_SHOW_QUERY_ACTUAL_FUTURE", "").lower() in {"1", "true", "yes"},
+        )
 
 
 def get_model_timeframes() -> list[str]:
