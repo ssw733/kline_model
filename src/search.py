@@ -449,7 +449,8 @@ def _has_future_candles(
 ) -> bool:
     entity_series = series_lookup[item["entity_id"]]
     end_idx = int(item["start_idx"]) + window_size
-    return end_idx < len(entity_series["close"])
+    required_end_idx = end_idx + window_size
+    return required_end_idx <= len(entity_series["close"])
 
 
 def _build_forecast_overlay(
@@ -806,6 +807,19 @@ def _save_plot(
     total_height = len(panels) * panel_height
 
     def wrap_title(title: str) -> list[str]:
+        if len(title) <= plot_cfg.title_max_chars:
+            return [title]
+
+        if " | " in title:
+            left, right = title.split(" | ", 1)
+            if len(left) <= plot_cfg.title_max_chars and len(right) <= plot_cfg.title_max_chars:
+                return [left, right]
+
+        if " -> " in title:
+            left, right = title.split(" -> ", 1)
+            if len(left) <= plot_cfg.title_max_chars and len(right) + 4 <= plot_cfg.title_max_chars:
+                return [left + " ->", right]
+
         words = title.split()
         if not words:
             return [title]
