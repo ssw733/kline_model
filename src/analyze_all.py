@@ -22,6 +22,8 @@ def _run_entity_search(
     max_vol_ratio: float,
     min_shape_score: float,
     min_final_score: float,
+    exclude_empty_plots: bool,
+    include_relative_plots: bool,
 ) -> tuple[str, str | None]:
     try:
         search(
@@ -39,6 +41,8 @@ def _run_entity_search(
             max_vol_ratio=max_vol_ratio,
             min_shape_score=min_shape_score,
             min_final_score=min_final_score,
+            exclude_empty_plots=exclude_empty_plots,
+            include_relative_plots=include_relative_plots,
         )
         return entity_id, None
     except Exception as exc:
@@ -60,6 +64,8 @@ def analyze_all(
     min_shape_score: float,
     min_final_score: float,
     workers: int,
+    exclude_empty_plots: bool,
+    include_relative_plots: bool,
 ) -> None:
     for timeframe, resolved_artifact_dir in _resolve_artifact_dirs(artifact_dir):
         metadata, _ = load_artifacts(resolved_artifact_dir)
@@ -87,6 +93,8 @@ def analyze_all(
                     max_vol_ratio,
                     min_shape_score,
                     min_final_score,
+                    exclude_empty_plots,
+                    include_relative_plots,
                 ): entity_id
                 for entity_id in entities
             }
@@ -125,6 +133,8 @@ def main() -> None:
     parser.add_argument("--min-shape-score", type=float, default=search_cfg.min_shape_score)
     parser.add_argument("--min-final-score", type=float, default=search_cfg.min_final_score)
     parser.add_argument("--workers", type=int, default=search_cfg.analyze_all_workers)
+    parser.add_argument("--exclude-empty-plots", action="store_true")
+    parser.add_argument("--include-relative-plots", action="store_true")
     args = parser.parse_args()
 
     analyze_all(
@@ -142,6 +152,8 @@ def main() -> None:
         min_shape_score=args.min_shape_score,
         min_final_score=args.min_final_score,
         workers=args.workers,
+        exclude_empty_plots=args.exclude_empty_plots,
+        include_relative_plots=args.include_relative_plots,
     )
 
 

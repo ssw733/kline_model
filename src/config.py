@@ -79,6 +79,8 @@ class SearchConfig:
     artifact_dir: str = os.getenv("SEARCH_ARTIFACT_DIR", "artifacts")
     horizons_raw: str = os.getenv("SEARCH_HORIZONS", "5,10,20")
     only_past: bool = os.getenv("SEARCH_ONLY_PAST", "").lower() in {"1", "true", "yes"}
+    binance_api_base_url: str = os.getenv("BINANCE_API_BASE_URL", "https://api.binance.com")
+    binance_query_quote_asset: str = os.getenv("BINANCE_QUERY_QUOTE_ASSET", "USDT")
     gap_candles: int = _get_env_int("SEARCH_GAP_CANDLES", 0)
     calendar_gap_candles: int = _get_env_int("SEARCH_CALENDAR_GAP_CANDLES", 0)
     min_range_ratio: float = _get_env_float("SEARCH_MIN_RANGE_RATIO", 0.35)
@@ -87,6 +89,9 @@ class SearchConfig:
     max_vol_ratio: float = _get_env_float("SEARCH_MAX_VOL_RATIO", 3.0)
     min_shape_score: float = _get_env_float("SEARCH_MIN_SHAPE_SCORE", 0.55)
     min_final_score: float = _get_env_float("SEARCH_MIN_FINAL_SCORE", 0.9)
+    analog_forecast_min_matches: int = _get_env_int("ANALOG_FORECAST_MIN_MATCHES", 3)
+    analog_forecast_high_confidence_matches: int = _get_env_int("ANALOG_FORECAST_HIGH_CONFIDENCE_MATCHES", 6)
+    analog_forecast_weight_power: float = _get_env_float("ANALOG_FORECAST_WEIGHT_POWER", 2.0)
     bullish_mean_threshold: float = _get_env_float("BULLISH_MEAN_THRESHOLD", 0.02)
     bullish_positive_rate_threshold: float = _get_env_float("BULLISH_POSITIVE_RATE_THRESHOLD", 0.6)
     bearish_mean_threshold: float = _get_env_float("BEARISH_MEAN_THRESHOLD", -0.02)

@@ -45,6 +45,7 @@ def fetch_series(db: DbConfig, source: SourceConfig) -> list[dict]:
         sql = f"""
             SELECT
                 COALESCE(coingecko_id, base_asset)::text AS entity_id,
+                base_asset::text AS base_asset,
                 EXTRACT(EPOCH FROM open_time)::double precision AS ts,
                 open::double precision AS open,
                 high::double precision AS high,
@@ -215,28 +216,6 @@ def _iter_entity_windows(
                 end_ts=float(ts[end_idx - 1]),
                 start_idx=start_idx,
             )
-
-
-def build_windows(
-    rows: list[dict],
-    train_cfg: TrainConfig,
-) -> tuple[np.ndarray, list[WindowMetadata]]:
-    data_cfg = DataConfig()
-    grouped = group_by_entity(rows)
-    windows: list[np.ndarray] = []
-    metadata: list[WindowMetadata] = []
-
-    for window, item in _iter_entity_windows(grouped, train_cfg, data_cfg):
-        windows.append(window)
-        metadata.append(item)
-
-    if not windows:
-        raise ValueError(
-            "No windows were created. Lower WINDOW_SIZE or MIN_POINTS_PER_ENTITY, "
-            "or verify the source data."
-        )
-
-    return np.stack(windows), metadata
 
 
 def write_windows_memmap(
