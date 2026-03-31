@@ -597,6 +597,7 @@ def _save_plot(
             ),
             "y_axis_format": "price",
             "group": "query",
+            "show_legend": True,
             "series": [
                 {
                     "x": query_x_raw[:split_idx],
@@ -645,6 +646,7 @@ def _save_plot(
                 ),
                 "y_axis_format": "percent",
                 "group": "query",
+                "show_legend": True,
                 "series": [
                     {
                         "x": query_x[:split_idx],
@@ -715,6 +717,7 @@ def _save_plot(
                     ),
                     "y_axis_format": "percent",
                     "group": group_name,
+                    "show_legend": False,
                     "series": [
                         {
                             "x": query_x[:window_size],
@@ -759,6 +762,7 @@ def _save_plot(
                 ),
                 "y_axis_format": "price",
                 "group": group_name,
+                "show_legend": False,
                 "series": [
                     {
                         "x": match_x_raw[:window_size],
@@ -984,6 +988,7 @@ def _save_plot(
             f'<line x1="{split_x:.2f}" y1="{content_top:.2f}" x2="{split_x:.2f}" y2="{content_bottom:.2f}" class="split"/>'
         )
 
+        show_legend = bool(panel.get("show_legend", False))
         legend_x = padding_left
         for series in panel["series"]:
             dash = ' stroke-dasharray="6 4"' if series.get("dashed") else ""
@@ -1019,13 +1024,14 @@ def _save_plot(
                 svg_parts.append(
                     f'<polyline fill="none" stroke="{series["color"]}" stroke-width="2"{dash} points="{polyline}"/>'
                 )
-            svg_parts.append(
-                f'<line x1="{legend_x}" y1="{legend_y:.2f}" x2="{legend_x + 18}" y2="{legend_y:.2f}" stroke="{series["color"]}" stroke-width="2"{dash}/>'
-            )
-            svg_parts.append(
-                f'<text x="{legend_x + 24}" y="{legend_y + 4:.2f}" class="small">{escape(series["label"])}</text>'
-            )
-            legend_x += 180
+            if show_legend:
+                svg_parts.append(
+                    f'<line x1="{legend_x}" y1="{legend_y:.2f}" x2="{legend_x + 18}" y2="{legend_y:.2f}" stroke="{series["color"]}" stroke-width="2"{dash}/>'
+                )
+                svg_parts.append(
+                    f'<text x="{legend_x + 24}" y="{legend_y + 4:.2f}" class="small">{escape(series["label"])}</text>'
+                )
+                legend_x += 180
 
         x_axis_label = "Price timeline from window start" if panel.get("y_axis_format") == "price" else "Candles from window start"
         svg_parts.append(
@@ -1034,11 +1040,14 @@ def _save_plot(
 
     svg_parts.append("</svg>")
     avg_score = 0.0
+    max_score = 0.0
     if matches:
-        avg_score = float(sum(score for _, _, score in matches) / len(matches))
+        match_scores = [score for _, _, score in matches]
+        avg_score = float(sum(match_scores) / len(match_scores))
+        max_score = float(max(match_scores))
     output_path = os.path.join(
         plot_dir,
-        f"{timeframe}_{query_item['entity_id']}_avgscore_{avg_score:.4f}.svg",
+        f"{timeframe}_{query_item['entity_id']}_avg_{avg_score:.4f}_max_{max_score:.4f}.svg",
     )
     with open(output_path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(svg_parts))
